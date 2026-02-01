@@ -1,127 +1,148 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Vessel Tracker</title>
+    <title>VesselScope</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2"></script>
     <style>
-        body { margin: 0; font-family: sans-serif; }
+        body { margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         #map { height: 100vh; width: 100%; }
         
-        /* The Search/Discovery Panel */
+        /* Side Panel */
         #ui-panel {
             position: absolute;
-            top: 10px; right: 10px;
+            top: 20px; right: 20px;
             z-index: 1000;
             background: white;
             padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.2);
-            width: 300px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            width: 280px;
         }
-        input { width: 100%; padding: 8px; margin-bottom: 10px; box-sizing: border-box; }
-        .stats { font-size: 0.9em; color: #555; margin-bottom: 10px; }
-        .ship-list { max-height: 200px; overflow-y: auto; border-top: 1px solid #eee; }
-        .ship-item { padding: 5px; cursor: pointer; border-bottom: 1px solid #f0f0f0; }
-        .ship-item:hover { background: #f9f9f9; }
-        .type-tag { font-size: 0.8em; background: #eee; padding: 2px 5px; border-radius: 4px; }
+        input { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
+        .stats { font-size: 0.85em; color: #666; margin-bottom: 10px; }
+        .ship-list { max-height: 250px; overflow-y: auto; border-top: 1px solid #eee; }
+        .ship-item { padding: 8px 5px; cursor: pointer; border-bottom: 1px solid #f5f5f5; font-size: 0.9em; }
+        .ship-item:hover { background: #f0f7ff; }
+
+        /* NEW: Last Updated Badge */
+        #time-badge {
+            position: absolute;
+            bottom: 20px; left: 20px;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            backdrop-filter: blur(4px);
+        }
     </style>
 </head>
 <body>
 
     <div id="ui-panel">
-        <h3>Vessel Discovery</h3>
-        <input type="text" id="search" placeholder="Search ship name..." />
-        <div class="stats" id="stats">Loading ships...</div>
+        <h3 style="margin-top:0;">VesselScope</h3>
+        <input type="text" id="search" placeholder="Search name or MMSI..." />
+        <div class="stats" id="stats">Connecting...</div>
         <div class="ship-list" id="results"></div>
     </div>
+
+    <!-- NEW: Time Display -->
+    <div id="time-badge">Waiting for data...</div>
 
     <div id="map"></div>
 
     <script>
-        // 1. Initialize Map
         var map = L.map('map').setView([20, 0], 2);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap'
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            attribution: '© OpenStreetMap, © CartoDB'
         }).addTo(map);
 
         var allShips = [];
         var markers = L.layerGroup().addTo(map);
-        var fuse; // The search engine instance
+        var fuse;
 
-        // 2. Fetch Data
+        // LOAD DATA
         fetch('public/ships.json')
             .then(res => res.json())
             .then(data => {
-                allShips = data;
+                // 1. Handle the new data structure
+                var updateTime = data.updated;
+                allShips = data.ships; // The list is now inside .ships
+
+                // 2. Update the Time Badge
+                document.getElementById('time-badge').innerHTML = `Last Updated: ${updateTime}`;
                 
-                // Initialize Search Engine (Fuse.js)
-                fuse = new Fuse(allShips, {
-                    keys: ['name', 'mmsi'], // Allow searching by Name or ID
-                    threshold: 0.3          // 0.0 = perfect match, 1.0 = match anything
-                });
+                // 3. Initialize Search
+                fuse = new Fuse(allShips, { keys: ['name', 'mmsi'], threshold: 0.3 });
 
                 updateStats();
                 renderMap(allShips);
-            });
+            })
+            .catch(err => console.error("Error loading ships:", err));
 
-        // 3. Render Markers on Map
         function renderMap(shipsToRender) {
             markers.clearLayers();
             shipsToRender.forEach(ship => {
-                var color = ship.type === 'Tanker' ? 'red' : 
-                            ship.type === 'Cargo' ? 'green' : 'blue';
-                            
-                var circle = L.circleMarker([ship.lat, ship.lon], {
-                    radius: 5,
-                    color: color,
-                    fillColor: color,
-                    fillOpacity: 0.7
-                }).bindPopup(`<b>${ship.name}</b><br>Type: ${ship.type}<br>MMSI: ${ship.mmsi}`);
-                
-                markers.addLayer(circle);
+                var color = '#95a5a6'; // Default Gray
+                if(ship.type_text.includes('Tanker')) color = '#e74c3c';
+                else if(ship.type_text.includes('Cargo')) color = '#2ecc71';
+                else if(ship.type_text.includes('Fishing')) color = '#f1c40f';
+                else if(ship.type_text.includes('Passenger')) color = '#9b59b6';
+                else if(ship.type_text.includes('Tug')) color = '#e67e22';
+
+                // Popup Logic with Raw Code
+                var popupContent = `
+                    <div style="font-family:sans-serif;">
+                        <h3 style="margin:0 0 5px 0;">${ship.name}</h3>
+                        <div style="margin-bottom:8px;">
+                            <span style="background:${color}; color:white; padding:2px 6px; border-radius:4px; font-size:0.8em;">
+                                ${ship.type_text}
+                            </span>
+                            <span style="color:#666; font-size:0.8em; margin-left:5px;">
+                                (Code: ${ship.type_code})
+                            </span>
+                        </div>
+                        <div style="font-size:0.9em; line-height:1.4;">
+                            <b>Speed:</b> ${ship.speed} kn <br>
+                            <b>Dest:</b> ${ship.dest} <br>
+                            <b>Size:</b> ${ship.len}m x ${ship.width}m
+                        </div>
+                        <div style="margin-top:8px; font-size:0.8em; text-align:right;">
+                            <a href="https://www.vesselfinder.com/vessels/details/${ship.mmsi}" target="_blank">More Info ↗</a>
+                        </div>
+                    </div>
+                `;
+
+                L.circleMarker([ship.lat, ship.lon], {
+                    radius: 5, color: 'white', weight: 1, 
+                    fillColor: color, fillOpacity: 0.8
+                }).bindPopup(popupContent).addTo(markers);
             });
         }
 
-        // 4. Update Statistics (Discovery Feature)
         function updateStats() {
-            var counts = {};
-            allShips.forEach(s => { counts[s.type] = (counts[s.type] || 0) + 1; });
-            
-            var statText = `Tracking <b>${allShips.length}</b> vessels.<br>`;
-            for (var type in counts) {
-                statText += `${type}: ${counts[type]} | `;
-            }
-            document.getElementById('stats').innerHTML = statText;
+            document.getElementById('stats').innerText = `Tracking ${allShips.length} vessels active now.`;
         }
 
-        // 5. Handle Search Input
         document.getElementById('search').addEventListener('input', (e) => {
             var term = e.target.value;
             var resultsDiv = document.getElementById('results');
             resultsDiv.innerHTML = '';
 
-            if (term.length < 2) {
-                renderMap(allShips); // Show all if search is empty
-                return;
-            }
+            if (term.length < 2) { renderMap(allShips); return; }
 
-            // Perform fuzzy search
-            var results = fuse.search(term);
-            var filteredShips = results.map(r => r.item);
+            var results = fuse.search(term).map(r => r.item);
+            renderMap(results);
 
-            // Update Map to only show matches
-            renderMap(filteredShips);
-
-            // Show list in the side panel
-            results.slice(0, 5).forEach(r => {
+            results.slice(0, 10).forEach(ship => {
                 var div = document.createElement('div');
                 div.className = 'ship-item';
-                div.innerHTML = `<b>${r.item.name}</b> <span class="type-tag">${r.item.type}</span>`;
+                div.innerHTML = `<b>${ship.name}</b> <small>(${ship.type_text})</small>`;
                 div.onclick = () => {
-                    map.setView([r.item.lat, r.item.lon], 10);
-                    // Find the marker and open popup (advanced, simplified here)
+                    map.setView([ship.lat, ship.lon], 10);
                 };
                 resultsDiv.appendChild(div);
             });
