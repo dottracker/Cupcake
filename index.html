@@ -211,14 +211,27 @@
         function renderMap(ships) {
             markers.clearLayers();
             ships.forEach(ship => {
-                var color = '#94a3b8'; // default
-                if(ship.type.includes('Tanker')) color = '#f87171'; // red
-                if(ship.type.includes('Cargo')) color = '#34d399'; // green
-                if(ship.type.includes('Fishing')) color = '#fbbf24'; // orange
-
+                var color = '#94a3b8'; 
+                if(ship.type.includes('Tanker')) color = '#f87171';
+                if(ship.type.includes('Cargo')) color = '#34d399';
+                if(ship.type.includes('Fishing')) color = '#fbbf24';
+        
+                // Name Fallback
+                var displayName = (ship.name && ship.name !== 'Unknown') ? ship.name : `Vessel ${ship.mmsi}`;
+        
                 var circle = L.circleMarker([ship.lat, ship.lon], {
-                    radius: 4, color: 'transparent', fillColor: color, fillOpacity: 0.8
-                }).on('click', () => selectShip(ship));
+                    radius: 4, 
+                    color: 'transparent', 
+                    fillColor: color, 
+                    fillOpacity: 0.8
+                })
+                .on('click', () => selectShip(ship))
+                // --- NEW: HOVER TOOLTIP ---
+                .bindTooltip(`<b>${displayName}</b><br>${ship.type}`, {
+                    direction: 'top',
+                    offset: [0, -5],
+                    opacity: 0.9
+                });
                 
                 markers.addLayer(circle);
             });
@@ -227,7 +240,7 @@
         // --- 5. SELECT SHIP (The "Intelligence" Feature) ---
         function selectShip(ship) {
             // 1. Fly to location
-            map.setView([ship.lat, ship.lon], 10, { animate: true });
+            map.setView([ship.lat, ship.lon], 16, { animate: true });
 
             // 2. Populate Detail Panel
             var panel = document.getElementById('detail-panel');
