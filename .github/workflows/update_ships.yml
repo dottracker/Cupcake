@@ -29,8 +29,8 @@ jobs:
 
       - name: Commit and Push Data
         run: |
-          git config --global user.name 'GitHub Action'
-          git config --global user.email 'action@github.com'
+          git config --global user.name 'Cupcake'
+          git config --global user.email 'cupcake@dottracker.com'
           git add public/ships.json
           git commit -m "Update ship data" || exit 0
           git push
