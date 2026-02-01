@@ -51,7 +51,7 @@
         var fuse; // The search engine instance
 
         // 2. Fetch Data
-        fetch('ships.json')
+        fetch('public/ships.json')
             .then(res => res.json())
             .then(data => {
                 allShips = data;
