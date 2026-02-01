@@ -1,152 +1,296 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>VesselScope</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VesselScope Intelligence</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2"></script>
+    <!-- Font Awesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
     <style>
-        body { margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        #map { height: 100vh; width: 100%; }
-        
-        /* Side Panel */
-        #ui-panel {
-            position: absolute;
-            top: 20px; right: 20px;
-            z-index: 1000;
-            background: white;
-            padding: 15px;
-            border-radius: 12px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            width: 280px;
+        :root {
+            --bg-dark: #0f172a;
+            --panel-bg: #1e293b;
+            --accent: #38bdf8;
+            --text-main: #f8fafc;
+            --text-sub: #94a3b8;
+            --border: #334155;
         }
-        input { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
-        .stats { font-size: 0.85em; color: #666; margin-bottom: 10px; }
-        .ship-list { max-height: 250px; overflow-y: auto; border-top: 1px solid #eee; }
-        .ship-item { padding: 8px 5px; cursor: pointer; border-bottom: 1px solid #f5f5f5; font-size: 0.9em; }
-        .ship-item:hover { background: #f0f7ff; }
 
-        /* NEW: Last Updated Badge */
-        #time-badge {
-            position: absolute;
-            bottom: 20px; left: 20px;
-            z-index: 1000;
-            background: rgba(0, 0, 0, 0.7);
-            color: white;
-            padding: 8px 15px;
-            border-radius: 20px;
-            font-size: 0.8em;
-            backdrop-filter: blur(4px);
+        body { margin: 0; display: flex; height: 100vh; font-family: 'Inter', system-ui, sans-serif; background: var(--bg-dark); color: var(--text-main); overflow: hidden; }
+
+        /* --- LEFT SIDEBAR (SEARCH ENGINE) --- */
+        #sidebar {
+            width: 380px;
+            background: var(--panel-bg);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            z-index: 2000;
+            box-shadow: 4px 0 20px rgba(0,0,0,0.3);
         }
+
+        .brand { padding: 20px; font-size: 1.4rem; font-weight: 700; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; color: var(--accent); }
+        
+        .search-container { padding: 20px; background: #1e293b; }
+        .search-box {
+            background: #0f172a;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px 15px;
+            color: white;
+            width: 100%;
+            font-size: 1rem;
+            outline: none;
+            transition: 0.2s;
+            box-sizing: border-box; /* Fix padding width issue */
+        }
+        .search-box:focus { border-color: var(--accent); }
+
+        .results-header { padding: 0 20px 10px; font-size: 0.85rem; color: var(--text-sub); text-transform: uppercase; letter-spacing: 1px; display: flex; justify-content: space-between; }
+        
+        #results-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0;
+        }
+
+        .ship-card {
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            transition: 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .ship-card:hover { background: #2c3e50; border-left: 4px solid var(--accent); }
+        
+        .ship-icon { width: 40px; height: 40px; background: #334155; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--accent); }
+        .ship-info h4 { margin: 0 0 4px 0; font-size: 1rem; color: white; }
+        .ship-info p { margin: 0; font-size: 0.85rem; color: var(--text-sub); }
+        .flag-badge { font-size: 0.75rem; background: #0f172a; padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); margin-left: auto; }
+
+        /* --- MAP AREA --- */
+        #map-container { flex: 1; position: relative; }
+        #map { height: 100%; width: 100%; }
+
+        /* --- DETAIL SLIDE-OVER PANEL --- */
+        #detail-panel {
+            position: absolute;
+            top: 20px; right: 20px; bottom: 20px;
+            width: 350px;
+            background: rgba(30, 41, 59, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            transform: translateX(120%);
+            transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 1001;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: -5px 0 25px rgba(0,0,0,0.5);
+        }
+        #detail-panel.active { transform: translateX(0); }
+
+        .detail-header { padding: 20px; background: var(--bg-dark); border-bottom: 1px solid var(--border); position: relative; }
+        .close-btn { position: absolute; top: 15px; right: 15px; color: var(--text-sub); cursor: pointer; background: none; border: none; font-size: 1.2rem; }
+        
+        .detail-body { padding: 20px; overflow-y: auto; flex: 1; }
+        
+        .data-row { display: flex; justify-content: space-between; margin-bottom: 12px; border-bottom: 1px solid #334155; padding-bottom: 8px; }
+        .data-label { color: var(--text-sub); font-size: 0.9rem; }
+        .data-val { font-weight: 600; font-size: 0.95rem; text-align: right; }
+
+        .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px; }
+        .action-btn {
+            background: #334155; color: white; text-decoration: none;
+            padding: 10px; text-align: center; border-radius: 6px; font-size: 0.85rem;
+            transition: 0.2s; border: 1px solid transparent;
+        }
+        .action-btn:hover { background: var(--accent); color: var(--bg-dark); }
+        .action-btn.primary { background: var(--accent); color: var(--bg-dark); font-weight: bold; grid-column: span 2; }
+
     </style>
 </head>
 <body>
 
-    <div id="ui-panel">
-        <h3 style="margin-top:0;">VesselScope</h3>
-        <input type="text" id="search" placeholder="Search name or MMSI..." />
-        <div class="stats" id="stats">Connecting...</div>
-        <div class="ship-list" id="results"></div>
+    <!-- SIDEBAR -->
+    <div id="sidebar">
+        <div class="brand">
+            <i class="fa-solid fa-anchor"></i> VesselScope
+        </div>
+        <div class="search-container">
+            <input type="text" id="search" class="search-box" placeholder="Search by Ship Name, MMSI, or IMO..." autocomplete="off">
+        </div>
+        <div class="results-header">
+            <span id="result-count">0 Vessels Found</span>
+            <span id="last-updated">Updating...</span>
+        </div>
+        <div id="results-list">
+            <!-- JS will populate this -->
+        </div>
     </div>
 
-    <!-- NEW: Time Display -->
-    <div id="time-badge">Waiting for data...</div>
-
-    <div id="map"></div>
+    <!-- MAP -->
+    <div id="map-container">
+        <div id="map"></div>
+        
+        <!-- DETAIL PANEL (Slide Over) -->
+        <div id="detail-panel">
+            <div id="panel-content">
+                <!-- JS Populates this -->
+            </div>
+        </div>
+    </div>
 
     <script>
-        var map = L.map('map').setView([20, 0], 2);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-            attribution: '© OpenStreetMap, © CartoDB'
+        // --- 1. CONFIGURATION ---
+        var map = L.map('map', { zoomControl: false }).setView([20, 0], 3);
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
+        
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap &copy; CartoDB',
+            maxZoom: 19
         }).addTo(map);
 
-        var allShips = [];
         var markers = L.layerGroup().addTo(map);
+        var allShips = [];
         var fuse;
 
-        // LOAD DATA
+        // --- 2. LOAD DATA ---
         fetch('public/ships.json')
             .then(res => res.json())
             .then(data => {
-                // 1. Handle the new data structure
-                var updateTime = data.updated;
-                allShips = data.ships; // The list is now inside .ships
-
-                // 2. Update the Time Badge
-                document.getElementById('time-badge').innerHTML = `Last Updated: ${updateTime}`;
+                allShips = data.ships;
                 
-                // 3. Initialize Search
-                fuse = new Fuse(allShips, { keys: ['name', 'mmsi'], threshold: 0.3 });
+                // Update Badge
+                var time = new Date(data.updated);
+                document.getElementById('last-updated').innerText = time.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                document.getElementById('result-count').innerText = `${allShips.length} VESSELS ONLINE`;
 
-                updateStats();
+                // Init Search
+                fuse = new Fuse(allShips, { keys: ['name', 'mmsi', 'imo'], threshold: 0.3 });
+                
+                // Initial Render
+                renderList(allShips);
                 renderMap(allShips);
-            })
-            .catch(err => console.error("Error loading ships:", err));
+            });
 
-        function renderMap(shipsToRender) {
-            markers.clearLayers();
-            shipsToRender.forEach(ship => {
-                var color = '#95a5a6'; // Default Gray
-                if(ship.type_text.includes('Tanker')) color = '#e74c3c';
-                else if(ship.type_text.includes('Cargo')) color = '#2ecc71';
-                else if(ship.type_text.includes('Fishing')) color = '#f1c40f';
-                else if(ship.type_text.includes('Passenger')) color = '#9b59b6';
-                else if(ship.type_text.includes('Tug')) color = '#e67e22';
+        // --- 3. RENDER SIDEBAR LIST ---
+        function renderList(ships) {
+            var container = document.getElementById('results-list');
+            container.innerHTML = '';
+            
+            // Limit sidebar to top 50 to prevent lag
+            ships.slice(0, 50).forEach(ship => {
+                var div = document.createElement('div');
+                div.className = 'ship-card';
+                div.onclick = () => selectShip(ship);
 
-                // Popup Logic with Raw Code
-                var popupContent = `
-                    <div style="font-family:sans-serif;">
-                        <h3 style="margin:0 0 5px 0;">${ship.name}</h3>
-                        <div style="margin-bottom:8px;">
-                            <span style="background:${color}; color:white; padding:2px 6px; border-radius:4px; font-size:0.8em;">
-                                ${ship.type_text}
-                            </span>
-                            <span style="color:#666; font-size:0.8em; margin-left:5px;">
-                                (Code: ${ship.type_code})
-                            </span>
-                        </div>
-                        <div style="font-size:0.9em; line-height:1.4;">
-                            <b>Speed:</b> ${ship.speed} kn <br>
-                            <b>Dest:</b> ${ship.dest} <br>
-                            <b>Size:</b> ${ship.len}m x ${ship.width}m
-                        </div>
-                        <div style="margin-top:8px; font-size:0.8em; text-align:right;">
-                            <a href="https://www.vesselfinder.com/vessels/details/${ship.mmsi}" target="_blank">More Info ↗</a>
-                        </div>
+                var iconType = ship.type.includes('Cargo') ? 'fa-ship' : 
+                               ship.type.includes('Tanker') ? 'fa-oil-well' : 'fa-sailboat';
+
+                div.innerHTML = `
+                    <div class="ship-icon"><i class="fa-solid ${iconType}"></i></div>
+                    <div class="ship-info">
+                        <h4>${ship.name}</h4>
+                        <p>${ship.type} • ${ship.speed}kn</p>
                     </div>
+                    <div class="flag-badge">${ship.flag}</div>
                 `;
-
-                L.circleMarker([ship.lat, ship.lon], {
-                    radius: 5, color: 'white', weight: 1, 
-                    fillColor: color, fillOpacity: 0.8
-                }).bindPopup(popupContent).addTo(markers);
+                container.appendChild(div);
             });
         }
 
-        function updateStats() {
-            document.getElementById('stats').innerText = `Tracking ${allShips.length} vessels active now.`;
+        // --- 4. RENDER MAP ---
+        function renderMap(ships) {
+            markers.clearLayers();
+            ships.forEach(ship => {
+                var color = '#94a3b8'; // default
+                if(ship.type.includes('Tanker')) color = '#f87171'; // red
+                if(ship.type.includes('Cargo')) color = '#34d399'; // green
+                if(ship.type.includes('Fishing')) color = '#fbbf24'; // orange
+
+                var circle = L.circleMarker([ship.lat, ship.lon], {
+                    radius: 4, color: 'transparent', fillColor: color, fillOpacity: 0.8
+                }).on('click', () => selectShip(ship));
+                
+                markers.addLayer(circle);
+            });
         }
 
+        // --- 5. SELECT SHIP (The "Intelligence" Feature) ---
+        function selectShip(ship) {
+            // 1. Fly to location
+            map.setView([ship.lat, ship.lon], 10, { animate: true });
+
+            // 2. Populate Detail Panel
+            var panel = document.getElementById('detail-panel');
+            var content = document.getElementById('panel-content');
+            
+            var statusColor = ship.speed < 0.5 ? '#f87171' : '#34d399';
+            var statusText = ship.speed < 0.5 ? 'STOPPED' : 'UNDERWAY';
+
+            content.innerHTML = `
+                <div class="detail-header">
+                    <button class="close-btn" onclick="closePanel()">&times;</button>
+                    <h2 style="margin:0; color:var(--accent);">${ship.name}</h2>
+                    <div style="font-size:0.9rem; margin-top:5px; color:#94a3b8;">${ship.type}</div>
+                </div>
+                <div class="detail-body">
+                    <div style="background:#0f172a; padding:10px; border-radius:6px; margin-bottom:15px; border:1px solid #334155;">
+                        <span style="color:${statusColor}; font-weight:bold;">● ${statusText}</span>
+                        <span style="float:right; color:white;">${ship.speed} kn / ${ship.course}°</span>
+                    </div>
+
+                    <div class="data-row"><span class="data-label">MMSI</span> <span class="data-val">${ship.mmsi}</span></div>
+                    <div class="data-row"><span class="data-label">IMO</span> <span class="data-val">${ship.imo || 'N/A'}</span></div>
+                    <div class="data-row"><span class="data-label">Call Sign</span> <span class="data-val">${ship.callsign || 'N/A'}</span></div>
+                    <div class="data-row"><span class="data-label">Flag</span> <span class="data-val">${ship.flag}</span></div>
+                    <div class="data-row"><span class="data-label">Destination</span> <span class="data-val">${ship.dest}</span></div>
+                    <div class="data-row"><span class="data-label">ETA</span> <span class="data-val">${ship.eta}</span></div>
+                    <div class="data-row"><span class="data-label">Dimensions</span> <span class="data-val">${ship.len}m x ${ship.width}m</span></div>
+                    <div class="data-row"><span class="data-label">Draught</span> <span class="data-val">${ship.draught}m</span></div>
+
+                    <h4 style="margin-top:25px; border-bottom:1px solid #334155; padding-bottom:5px;">External Intelligence</h4>
+                    <div class="btn-grid">
+                        <a href="https://www.google.com/search?tbm=isch&q=${ship.name} ship ${ship.type}" target="_blank" class="action-btn">
+                            <i class="fa-solid fa-image"></i> Photos
+                        </a>
+                        <a href="https://www.vesselfinder.com/vessels?name=${ship.mmsi}" target="_blank" class="action-btn">
+                            <i class="fa-solid fa-compass"></i> VF Data
+                        </a>
+                        <a href="https://www.marinetraffic.com/en/ais/details/ships/mmsi:${ship.mmsi}" target="_blank" class="action-btn primary">
+                            <i class="fa-solid fa-satellite-dish"></i> MarineTraffic Profile
+                        </a>
+                    </div>
+                </div>
+            `;
+            
+            // 3. Slide it in
+            panel.classList.add('active');
+        }
+
+        function closePanel() {
+            document.getElementById('detail-panel').classList.remove('active');
+        }
+
+        // --- 6. SEARCH LOGIC ---
         document.getElementById('search').addEventListener('input', (e) => {
             var term = e.target.value;
-            var resultsDiv = document.getElementById('results');
-            resultsDiv.innerHTML = '';
-
-            if (term.length < 2) { renderMap(allShips); return; }
-
+            if(term.length < 2) {
+                renderList(allShips);
+                return;
+            }
             var results = fuse.search(term).map(r => r.item);
-            renderMap(results);
-
-            results.slice(0, 10).forEach(ship => {
-                var div = document.createElement('div');
-                div.className = 'ship-item';
-                div.innerHTML = `<b>${ship.name}</b> <small>(${ship.type_text})</small>`;
-                div.onclick = () => {
-                    map.setView([ship.lat, ship.lon], 10);
-                };
-                resultsDiv.appendChild(div);
-            });
+            renderList(results);
         });
+
     </script>
 </body>
 </html>
