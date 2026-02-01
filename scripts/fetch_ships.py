@@ -118,9 +118,9 @@ async def connect_ais_stream():
 
             except: continue
 
-    # --- STEP 3: CLEANUP (Remove ships older than 24 hours) ---
+    # --- STEP 3: CLEANUP (Remove ships older than 72 hours) ---
     clean_ships = []
-    cutoff_time = datetime.now(timezone.utc) - timedelta(hours=24)
+    cutoff_time = datetime.now(timezone.utc) - timedelta(hours=72)
     
     for s in ships.values():
         # Only keep if valid lat/lon
