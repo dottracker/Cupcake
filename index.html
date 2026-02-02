@@ -114,6 +114,44 @@
         }
         .action-btn:hover { background: var(--accent); color: var(--bg-dark); }
         .action-btn.primary { background: var(--accent); color: var(--bg-dark); font-weight: bold; grid-column: span 2; }
+        /* --- NEW FILTER & SORT STYLES --- */
+        .controls-bar {
+            padding: 10px 20px;
+            background: #1e293b;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            gap: 10px;
+        }
+        
+        .filter-btn {
+            background: #334155; color: white; border: none;
+            padding: 8px 12px; border-radius: 6px; cursor: pointer;
+            font-size: 0.85rem; display: flex; align-items: center; gap: 6px;
+            flex: 1; justify-content: center;
+        }
+        .filter-btn:hover { background: var(--accent); color: #0f172a; }
+        
+        .sort-select {
+            background: #0f172a; color: white; border: 1px solid var(--border);
+            padding: 8px; border-radius: 6px; font-size: 0.85rem; outline: none;
+            flex: 1;
+        }
+        
+        #advanced-filters {
+            background: #0f172a;
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--border);
+            display: none; /* Hidden by default */
+            font-size: 0.9rem;
+        }
+        #advanced-filters.open { display: block; }
+        
+        .filter-row { margin-bottom: 12px; }
+        .filter-label { display: block; color: var(--text-sub); margin-bottom: 5px; font-size: 0.8rem; }
+        .filter-input {
+            width: 100%; background: #1e293b; border: 1px solid var(--border);
+            color: white; padding: 8px; border-radius: 4px; box-sizing: border-box;
+        }
 
     </style>
 </head>
@@ -126,6 +164,41 @@
         </div>
         <div class="search-container">
             <input type="text" id="search" class="search-box" placeholder="Search by Ship Name, MMSI, or IMO..." autocomplete="off">
+        </div>
+        <!-- Filter & Sort Controls -->
+        <div class="controls-bar">
+            <button class="filter-btn" onclick="toggleFilters()">
+                <i class="fa-solid fa-filter"></i> Filters
+            </button>
+            <select id="sort-select" class="sort-select" onchange="applyFilters()">
+                <option value="name">Sort: Name (A-Z)</option>
+                <option value="size_desc">Sort: Size (Largest)</option>
+                <option value="draught_desc">Sort: Draught (Deepest)</option>
+                <option value="speed_desc">Sort: Speed (Fastest)</option>
+                <option value="updated_desc">Sort: Recently Seen</option>
+            </select>
+        </div>
+        
+        <!-- Hidden Advanced Filter Panel -->
+        <div id="advanced-filters">
+            <div class="filter-row">
+                <label class="filter-label">Flag (Country)</label>
+                <select id="flag-filter" class="filter-input" onchange="applyFilters()">
+                    <option value="All">All Countries</option>
+                    <!-- Populated by JS -->
+                </select>
+            </div>
+            
+            <div style="display:flex; gap:10px;">
+                <div class="filter-row" style="flex:1;">
+                    <label class="filter-label">Max Draught (m)</label>
+                    <input type="number" id="draught-filter" class="filter-input" placeholder="e.g. 10" oninput="applyFilters()">
+                </div>
+                <div class="filter-row" style="flex:1;">
+                    <label class="filter-label">Min Length (m)</label>
+                    <input type="number" id="len-filter" class="filter-input" placeholder="e.g. 100" oninput="applyFilters()">
+                </div>
+            </div>
         </div>
         <div class="results-header">
             <span id="result-count">0 Vessels Found</span>
@@ -163,30 +236,108 @@
         var fuse;
 
         // --- 2. LOAD DATA ---
+        // ... (Keep your Map Setup and Variables at the top) ...
+
+        // --- 2. LOAD DATA ---
         fetch('public/ships.json')
             .then(res => res.json())
             .then(data => {
                 allShips = data.ships;
                 
-                // Update Badge
+                // Update Time Badge
                 var time = new Date(data.updated);
                 document.getElementById('last-updated').innerText = time.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                document.getElementById('result-count').innerText = `${allShips.length} VESSELS ONLINE`;
-
-                // Init Search
+                
+                // Init Search Engine
                 fuse = new Fuse(allShips, { keys: ['name', 'mmsi', 'imo'], threshold: 0.3 });
                 
+                // Populate Flag Dropdown
+                populateFlags(allShips);
+
                 // Initial Render
-                renderList(allShips);
-                renderMap(allShips);
+                applyFilters(); 
             });
 
-        // --- 3. RENDER SIDEBAR LIST ---
+        // --- NEW: POPULATE FLAGS ---
+        function populateFlags(ships) {
+            var flags = [...new Set(ships.map(s => s.flag))].sort();
+            var select = document.getElementById('flag-filter');
+            flags.forEach(f => {
+                var opt = document.createElement('option');
+                opt.value = f;
+                opt.innerText = f;
+                select.appendChild(opt);
+            });
+        }
+
+        // --- NEW: TOGGLE FILTER PANEL ---
+        function toggleFilters() {
+            var panel = document.getElementById('advanced-filters');
+            panel.classList.toggle('open');
+        }
+
+        // --- CORE: FILTER & SORT LOGIC ---
+        function applyFilters() {
+            // 1. Get Values
+            var searchTerm = document.getElementById('search').value;
+            var flagVal = document.getElementById('flag-filter').value;
+            var maxDraught = parseFloat(document.getElementById('draught-filter').value);
+            var minLen = parseFloat(document.getElementById('len-filter').value);
+            var sortVal = document.getElementById('sort-select').value;
+
+            // 2. Filter List
+            var filtered = allShips;
+
+            // Search Term Filter
+            if (searchTerm.length > 1) {
+                filtered = fuse.search(searchTerm).map(r => r.item);
+            }
+
+            // Advanced Filters
+            filtered = filtered.filter(ship => {
+                // Flag Check
+                if (flagVal !== 'All' && ship.flag !== flagVal) return false;
+                
+                // Draught Check (Less than X) - exclude ships with 0/null draught
+                if (!isNaN(maxDraught) && maxDraught > 0) {
+                    if (ship.draught > maxDraught || ship.draught === 0) return false;
+                }
+
+                // Length Check (Greater than X)
+                if (!isNaN(minLen) && minLen > 0) {
+                    if (ship.len < minLen) return false;
+                }
+
+                return true;
+            });
+
+            // 3. Sort List
+            filtered.sort((a, b) => {
+                if (sortVal === 'name') return a.name.localeCompare(b.name);
+                if (sortVal === 'size_desc') return (b.len * b.width) - (a.len * a.width);
+                if (sortVal === 'draught_desc') return b.draught - a.draught;
+                if (sortVal === 'speed_desc') return b.speed - a.speed;
+                // Default: Fallback to alphabetical
+                return a.name.localeCompare(b.name);
+            });
+
+            // 4. Render
+            document.getElementById('result-count').innerText = `${filtered.length} VESSELS FOUND`;
+            renderList(filtered);
+            renderMap(filtered);
+        }
+
+        // --- RENDER LIST (Updated for Sidebar) ---
         function renderList(ships) {
             var container = document.getElementById('results-list');
             container.innerHTML = '';
             
-            // Limit sidebar to top 50 to prevent lag
+            if(ships.length === 0) {
+                container.innerHTML = '<div style="padding:20px; text-align:center; color:#64748b;">No ships match filters</div>';
+                return;
+            }
+
+            // Limit to top 50 for performance
             ships.slice(0, 50).forEach(ship => {
                 var div = document.createElement('div');
                 div.className = 'ship-card';
@@ -194,12 +345,21 @@
 
                 var iconType = ship.type.includes('Cargo') ? 'fa-ship' : 
                                ship.type.includes('Tanker') ? 'fa-oil-well' : 'fa-sailboat';
+                
+                var displayName = (ship.name && ship.name !== 'Unknown') ? ship.name : `Vessel ${ship.mmsi}`;
+
+                // Add small details to list view based on sort
+                var extraInfo = `${ship.type}`;
+                var sortVal = document.getElementById('sort-select').value;
+                if (sortVal === 'draught_desc') extraInfo += ` • Draught: ${ship.draught}m`;
+                else if (sortVal === 'size_desc') extraInfo += ` • ${ship.len}m long`;
+                else extraInfo += ` • ${ship.speed}kn`;
 
                 div.innerHTML = `
                     <div class="ship-icon"><i class="fa-solid ${iconType}"></i></div>
                     <div class="ship-info">
-                        <h4>${ship.name}</h4>
-                        <p>${ship.type} • ${ship.speed}kn</p>
+                        <h4>${displayName}</h4>
+                        <p>${extraInfo}</p>
                     </div>
                     <div class="flag-badge">${ship.flag}</div>
                 `;
@@ -207,35 +367,30 @@
             });
         }
 
-        // --- 4. RENDER MAP ---
+        // --- MAP RENDER ---
         function renderMap(ships) {
             markers.clearLayers();
             ships.forEach(ship => {
-                var color = '#94a3b8'; 
+                var color = '#94a3b8'; // default
                 if(ship.type.includes('Tanker')) color = '#f87171';
                 if(ship.type.includes('Cargo')) color = '#34d399';
                 if(ship.type.includes('Fishing')) color = '#fbbf24';
-        
-                // Name Fallback
+
                 var displayName = (ship.name && ship.name !== 'Unknown') ? ship.name : `Vessel ${ship.mmsi}`;
-        
-                var circle = L.circleMarker([ship.lat, ship.lon], {
-                    radius: 4, 
-                    color: 'transparent', 
-                    fillColor: color, 
-                    fillOpacity: 0.8
+
+                L.circleMarker([ship.lat, ship.lon], {
+                    radius: 4, color: 'transparent', fillColor: color, fillOpacity: 0.8
                 })
                 .on('click', () => selectShip(ship))
-                // --- NEW: HOVER TOOLTIP ---
-                .bindTooltip(`<b>${displayName}</b><br>${ship.type}`, {
-                    direction: 'top',
-                    offset: [0, -5],
-                    opacity: 0.9
-                });
-                
-                markers.addLayer(circle);
+                .bindTooltip(`<b>${displayName}</b><br>${ship.type}`, { direction: 'top', offset: [0, -5], opacity: 0.9 })
+                .addTo(markers);
             });
         }
+
+        // Attach search input event
+        document.getElementById('search').addEventListener('input', applyFilters);
+
+        // Keep selectShip(...) and closePanel() functions as they were
 
         // --- 5. SELECT SHIP (The "Intelligence" Feature) ---
         function selectShip(ship) {
